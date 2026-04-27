@@ -1,2 +1,2 @@
 # data_science
-Working on the dat science course
+Working on the data science exam
