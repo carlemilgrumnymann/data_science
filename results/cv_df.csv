@@ -1,0 +1,13 @@
+method,MSE
+linear_null,3.5412102867731132
+linear_all,88.58903906091919
+linear_econ_PCA,36.65781110914007
+lasso_high_alpha,3.5412102867731106
+lasso_all_no_int,21.994889126307804
+lasso_all_all_int,14.885081657530385
+lasso_raw_econ_no_int,21.994889126307804
+lasso_raw_econ_all_int,13.623510261697566
+lasso_no_gini_econ_no_int,21.99479232072766
+lasso_econ_PC2,5.031713131708999
+lasso_no_gini_econ_all_int,13.246817944083872
+lasso_pers_all_int,13.260680375876065

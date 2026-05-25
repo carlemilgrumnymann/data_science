@@ -1,0 +1,13 @@
+predictor,bart_all_inclusion,bart_PC2_econ_inclusion,bart_PC3_econ_inclusion,bart_raw_econ_inclusion,bart_well_us_inclusion,bart_well_inclusion
+econ_PC1,,75.237,59.864,,,
+econ_PC2,,75.875,60.549,,,
+econ_PC3,,,61.69,,,
+gini,33.355,,,43.214,,
+gdp,34.187,,,44.033,,
+unemployment,33.604,,,43.077,,
+inflation,33.89,,,43.133,,
+wage,33.539,,,43.26,,
+pers,33.248,,,,74.986,100.712
+us,33.639,,,,76.113,
+prospective conscutive term for incumbent party,33.584,75.773,60.575,43.543,75.79,100.491
+prospective 1st/2nd term for incumbent party candidate,33.734,75.616,60.195,42.975,75.484,100.949
