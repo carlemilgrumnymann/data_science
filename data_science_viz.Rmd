@@ -1,0 +1,473 @@
+---
+title: "data_science_viz"
+author: "Laura Sørine Voldgaard"
+date: "2026-05-24"
+output: html_document
+---
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+# packages
+pacman::p_load(tidyverse)
+
+```
+
+
+## Data prep
+
+```{r}
+# load data
+
+# for MSE plot
+MSE_results_linear_lasso <- read_csv("results/cv_df.csv") # MSE results for linear and lasso models
+MSE_results_bart <- read_csv("results/BART_ucloud/cv_df.csv") # MSE results for bart
+
+# for prediction plot
+null_pred <- read_csv("results/pred_uncertainty/null_pred.csv") # predictions for 2016, 2020, and 2024 election for the null model
+#linear_pred <- read_csv("results/pred_uncertainty/pred_df.csv") # predictions for 2016, 2020, and 2024 election for some linear models
+lasso_pred <- read_csv("results/pred_uncertainty/boot_df_lasso_pers_all_int.csv") # predictions for 2016, 2020, and 2024 election for some lasso models
+bart_pred <- read_csv("results/pred_uncertainty/bart_pred_df.csv") # predictions for 2016, 2020, and 2024 election for some bart models
+
+# for variable inclusion plot
+variable_inclusion_bart <- read_csv("results/BART_ucloud/var_df.csv") # predictions for 2016, 2020, and 2024 election for some models
+
+
+```
+
+
+
+## Plot
+
+
+### MSE results
+
+```{r}
+# combine plots
+MSE_results_all <- bind_rows(MSE_results_linear_lasso, MSE_results_bart)
+MSE_results_all
+```
+
+
+
+
+```{r}
+# filter for the models we want to show
+MSE_filtered <- MSE_results_all %>%
+  filter(method %in% c("linear_null", 
+                       "linear_all", 
+                       "lasso_all_no_int", 
+                       "lasso_all_all_int", 
+                       "lasso_econ_PC2", 
+                       "bart_all", 
+                       "bart_PC3_econ", 
+                       "bart_well",
+                       "lasso_pers_all_int",
+                       "lasso_econ_PC2"))
+
+
+# plot 
+MSE_results_v1 <- ggplot(MSE_filtered, aes(x = MSE, y = reorder(method, -MSE))) +
+  geom_col(fill = "darkcyan", width = 0.6) +
+  geom_text(aes(label = round(MSE, 2)), hjust = -0.2, size = 3.5) +
+  labs(
+    title = "Cross-Validation MSE by Model",
+    x = "MSE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(color = "black")
+  )
+
+MSE_results_v1
+
+```
+
+null✔
+linear_all✔
+
+lasso_all✔
+lasso_econ (best predicting) - lasso_econ_PC2✔
+lasso_wellbeing (best predicting) - lasso_pers_all_int✔
+
+bart_all✔
+bart_econ (best predicting) - bart_PC3_econ✔
+bart_wellbeing (best predicting) - bart_well✔
+
+
+
+
+
+
+
+### Prediction results
+
+```{r}
+# prep null data
+names(null_pred)
+
+# only keep last 3 rows
+null_pred_filtered <- tail(null_pred, 3)
+
+# add year column
+null_pred_filtered <- tail(null_pred, 3) %>%
+  mutate(year = c(2016, 2020, 2024)) %>%
+  select(year, everything())
+
+null_pred_filtered # done
+
+```
+
+
+```{r}
+# prep linear data
+
+```
+
+
+
+```{r}
+# prep lasso data
+lasso_pred
+
+# remove columns
+lasso_pred_filtered <- lasso_pred %>% select(-`Boot std`, -`Contains actual`)
+
+# rename column
+lasso_pred_filtered <- lasso_pred_filtered %>% 
+  rename(actual = Actual,
+         lasso_pers_all_int = Predicted,
+         lasso_pers_all_int_lower = Lower,
+         lasso_pers_all_int_upper = Upper)
+
+lasso_pred_filtered
+
+```
+
+
+
+```{r}
+# prep bart data
+names(bart_pred)
+
+bart_pred_filtered <- bart_pred %>%
+  select(year, actual, bart_well, bart_well_lower, bart_well_upper, 
+         bart_PC3_econ, bart_PC3_econ_lower, bart_PC3_econ_upper)
+
+bart_pred_filtered # done
+```
+
+
+```{r}
+# merge dataframes
+all_preds <- null_pred_filtered %>%
+  left_join(bart_pred_filtered, by = "year") %>% 
+  left_join(lasso_pred_filtered, by = "year")
+
+
+# remove extra "actual" columns
+all_preds <- all_preds %>% select(-`actual.x`, -`actual.y`)
+
+all_preds
+```
+
+
+
+
+
+
+```{r}
+
+# define which columns are point predictions
+# (everything except year, actual, and the lower/upper columns)
+model_cols <- c("null", "bart_well", "bart_PC3_econ", "lasso_pers_all_int")
+
+# pivot to long format with lower and upper attached to each model
+pred_long <- model_cols %>%
+  map_dfr(function(m) {
+    all_preds %>%
+      select(year, actual,
+             predicted = all_of(m),
+             lower     = all_of(paste0(m, "_lower")),
+             upper     = all_of(paste0(m, "_upper"))) %>%
+      mutate(model = m)
+  })
+
+# plot
+predictions_v2 <- ggplot(pred_long, aes(x = year)) +
+  # uncertainty ribbon for each model
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = model), alpha = 0.2) +
+  scale_y_continuous(limits = c(40, 60), oob = scales::squish) +
+  # model prediction lines
+  geom_line(aes(y = predicted, color = model), linetype = "dashed", linewidth = 1) +
+  geom_point(aes(y = predicted, color = model), size = 4) +
+  # actual values in black on top
+  geom_line(aes(y = actual), color = "black", linewidth = 1.5) +
+  geom_point(aes(y = actual), color = "black", size = 4) +
+  labs(x = "Election Year", y = "Vote Share for Incumbent (%)", 
+       color = "Model", fill = "Model") +
+  theme_minimal(base_size = 13) +
+  scale_x_continuous(breaks = c(2016, 2020, 2024))
+
+predictions_v2
+```
+
+actual✔
+null✔
+lasso_econ_PC2✔
+bart_wellbeing (personal)✔
+bart_econ_PC2✔
+
+
+
+
+
+
+
+
+
+
+
+
+### Variable inclusion plot
+
+```{r}
+# for bart_all
+variable_inclusion_v1 <- variable_inclusion_bart %>%
+  filter(!is.na(bart_all_inclusion)) %>%
+  ggplot(aes(x = bart_all_inclusion, y = reorder(predictor, bart_all_inclusion))) +
+  geom_col(fill = "darkcyan", width = 0.6) +
+  geom_text(aes(label = round(bart_all_inclusion, 2)), hjust = -0.2, size = 3.5) +
+  scale_x_continuous(limits = c(0, 40), oob = scales::squish) +
+  labs(
+    title = "Variable Inclusion Proportions (BART)",
+    x = "Inclusion Proportion",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(color = "black")
+  )
+
+variable_inclusion_v1
+
+```
+
+
+
+
+## Save plots
+
+```{r}
+# MSE results
+ggsave("results/figures/MSE_results_v1.jpg", MSE_results_v1, width = 12, height = 10, dpi = 300)
+
+# Predictions
+ggsave("results/figures/predictions_v2.jpg", predictions_v1, width = 12, height = 10, dpi = 300)
+
+# Variable inclusion
+ggsave("results/figures/variable_inclusion_bart_v1.jpg", variable_inclusion_v1, width = 12, height = 10, dpi = 300)
+
+```
+
+
+
+
+
+
+
+### NYT plot
+```{r}
+# merge dataframes
+all_preds <- null_pred_filtered %>%
+  left_join(bart_pred_filtered, by = "year") %>% 
+  left_join(lasso_pred_filtered, by = "year")
+
+
+# remove extra "actual" columns
+all_preds <- all_preds %>% select(-`actual.x`, -`actual.y`)
+
+all_preds
+```
+
+
+
+"null", "bart_well", "bart_PC3_econ", "actual"
+
+```{r}
+all_preds_nyt <- all_preds %>%
+  select(year, actual, 
+         null, null_lower, null_upper,
+         bart_well, bart_well_lower, bart_well_upper,
+         bart_PC3_econ, bart_PC3_econ_lower, bart_PC3_econ_upper)
+
+colnames(all_preds_nyt)
+```
+
+
+With uncertainty
+```{r}
+pred_long_simple <- bind_rows(
+  all_preds_nyt %>% transmute(year, model = "Actual",           predicted = actual,        lower = NA,                 upper = NA),
+  all_preds_nyt %>% transmute(year, model = "Null model",       predicted = null,          lower = null_lower,         upper = null_upper),
+  all_preds_nyt %>% transmute(year, model = "BART (wellbeing)", predicted = bart_well,     lower = bart_well_lower,    upper = bart_well_upper),
+  all_preds_nyt %>% transmute(year, model = "BART (economic)",  predicted = bart_PC3_econ, lower = bart_PC3_econ_lower, upper = bart_PC3_econ_upper)
+) %>%
+  mutate(model = factor(model, levels = c("Actual", "Null model",
+                                          "BART (wellbeing)", "BART (economic)")))
+```
+
+
+
+
+
+```{r}
+# THE ONE
+predictions_bar <- ggplot(pred_long_simple,
+                          aes(x = factor(year), y = predicted, fill = model)) +
+  geom_bar(stat = "identity",
+           position = position_dodge(width = 0.8),
+           width = 0.7) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.8),
+                width = 0.2,
+                color = "gray30",
+                linewidth = 0.7) +
+  geom_hline(yintercept = 50,
+             linetype = "dashed",
+             color = "gray40") +
+  scale_y_continuous(limits = c(0, 65),
+                     breaks = seq(0, 65, 10),
+                     expand = c(0, 0)) +
+  scale_fill_manual(values = c(
+    "Actual"           = "black",
+    "Null model"       = "#b0b0b0",
+    "BART (wellbeing)" = "#707070",
+    "BART (economic)"  = "#d8d8d8"
+  ),
+  labels = c(
+    "Actual"           = "True vote share",
+    "Null model"       = "Model with mean vote share accross 12 elections",
+    "BART (wellbeing)" = "Machine Learning model based on wellbeing factors",
+    "BART (economic)"  = "Machine Learning model based on macroeconomic factors"
+    
+  )) +
+  labs(x = NULL,
+       y = "Vote share for Incumbent (%)",
+       fill = NULL,
+       title = "How well did our models predict incumbent vote share?",
+       subtitle = "Predicted vs. actual popular vote share for the incumbent party: Presidential elections 2016, 2020, and 2024",
+       caption = "Error bars reflect uncertainty intervals in each model's prediction, showing the range of plausible predicted values") +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position    = "top",
+    legend.direction   = "horizontal",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    plot.title         = element_text(face = "bold", size = 20, hjust = 0),
+    plot.subtitle      = element_text(color = "gray40", size = 14, hjust = 0),
+    plot.caption       = element_text(color = "gray50", size = 11, hjust = 0),
+    axis.text.x = element_text(face = "bold", size = 13, margin = margin(t = 8))  )
+
+predictions_bar
+```
+
+---------------------------------------------------------------------------------------
+
+
+
+DID NOT USE
+```{r}
+#install.packages("cowplot")
+#install.packages("magick")
+library(cowplot)
+library(magick)
+library(grid)
+
+# load images directly - they already have circles
+donkey_grob   <- rasterGrob(as.raster(image_read("donkey.png")),   interpolate = TRUE)
+elephant_grob <- rasterGrob(as.raster(image_read("elephant.png")), interpolate = TRUE)
+
+# build plot with blank x-axis text
+predictions_bar <- ggplot(pred_long_simple,
+                          aes(x = factor(year), y = predicted, fill = model)) +
+  geom_bar(stat = "identity",
+           position = position_dodge(width = 0.8),
+           width = 0.7) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.8),
+                width = 0.2,
+                color = "gray30",
+                linewidth = 0.7) +
+  geom_hline(yintercept = 50,
+             linetype = "dashed",
+             color = "gray40") +
+  scale_y_continuous(limits = c(0, 65),
+                     breaks = seq(0, 65, 10),
+                     expand = c(0, 0)) +
+  scale_fill_manual(values = c(
+    "Actual"           = "black",
+    "Null model"       = "#999999",
+    "BART (wellbeing)" = "#D4A017",
+    "BART (economic)"  = "#4A4A4A"
+  ),
+  labels = c(
+    "Actual"           = "True vote share",
+    "Null model"       = "Model with mean vote share across 12 elections",
+    "BART (wellbeing)" = "Machine Learning model based on wellbeing factors",
+    "BART (economic)"  = "Machine Learning model based on macroeconomic factors"
+  )) +
+  labs(x = NULL,
+       y = "Vote share for Incumbent (%)",
+       fill = NULL,
+       title = "How well did our models predict incumbent vote share?",
+       subtitle = "Predicted vs. actual popular vote share for the incumbent party, 2016-2024",
+       caption = "Error bars reflect uncertainty intervals in each model's prediction, showing the range of plausible predicted values") +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position    = "top",
+    legend.direction   = "horizontal",
+    legend.text        = element_text(size = 10),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    plot.title         = element_text(face = "bold", size = 14, hjust = 0),
+    plot.subtitle      = element_text(color = "gray40", size = 11, hjust = 0),
+    plot.caption       = element_text(color = "gray50", size = 9, hjust = 0),
+    axis.text.x        = element_blank(),
+    plot.margin        = margin(t = 5, r = 5, b = 40, l = 5)
+  )
+
+# combine plot with images and year labels below
+final_plot <- ggdraw(predictions_bar) +
+  draw_grob(donkey_grob,   x = 0.18, y = -0.06, width = 0.12, height = 0.12) +
+  draw_grob(elephant_grob, x = 0.47, y = -0.06, width = 0.12, height = 0.12) +
+  draw_grob(donkey_grob,   x = 0.76, y = -0.06, width = 0.12, height = 0.12) +
+  draw_label("2016", x = 0.24, y = 0.04, size = 11, fontface = "bold") +
+  draw_label("2020", x = 0.53, y = 0.04, size = 11, fontface = "bold") +
+  draw_label("2024", x = 0.82, y = 0.04, size = 11, fontface = "bold") +
+  draw_label("Error bars reflect uncertainty intervals in each model's prediction,\nshowing the range of plausible predicted values",
+             x = 0.98, y = 0.84, size = 8, color = "gray50",
+             hjust = 1, vjust = 1)
+
+final_plot
+
+# save with bigger dimensions to give room for circles
+#ggsave("predictions_nyt.png", final_plot, width = 12, height = 8, dpi = 300)
+```
+
+
